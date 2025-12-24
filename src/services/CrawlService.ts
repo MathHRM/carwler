@@ -7,6 +7,9 @@ import { getAllSiteIds } from '@scrapers/SiteId.js';
 import { logger } from '@infra/logger.js';
 import { createPlaywrightInstance, closePlaywrightInstance } from '@config/playwright.js';
 
+// Importar scrapers para garantir registro na factory
+import '@scrapers/index.js';
+
 /**
  * Serviço de orquestração para crawling
  * Coordena o processo de scraping usando a factory e retorna dados normalizados
