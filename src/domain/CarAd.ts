@@ -35,6 +35,10 @@ export interface CarAd {
   publishedAt: Date | null;
   /** Site de origem (olx, webmotors, facebook, etc.) */
   source: string;
+  /** Motor do veículo */
+  engine: string | null;
+  /** Tipo de veículo */
+  carType: string | null;
   /** Dados adicionais específicos do site (opcional) */
   metadata?: Record<string, unknown>;
 }

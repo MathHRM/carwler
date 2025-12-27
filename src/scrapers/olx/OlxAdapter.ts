@@ -1,57 +1,103 @@
-import type { CarAd } from '@domain/CarAd.js';
 import type { OlxRawAd } from './types.js';
+import { BaseAdapter } from '../BaseAdapter.js';
 import { SiteId } from '../SiteId.js';
 
 /**
  * Adapter para transformar dados brutos da OLX em CarAd normalizado
  * Segue o padrão Adapter
  */
-export class OlxAdapter {
+export class OlxAdapter extends BaseAdapter {
   /**
-   * Converte um anúncio bruto da OLX para o modelo normalizado CarAd
+   * Obtém o payload raw tipado
    */
-  adapt(rawAd: OlxRawAd, url: string): CarAd {
+  private getRawAd(): OlxRawAd {
+    if (!this.rawPayload) {
+      throw new Error('Payload não foi definido. Chame setPayload() antes de adapt().');
+    }
+    return this.rawPayload as OlxRawAd;
+  }
+
+  protected id(): string {
     // Extrair ID da URL (último segmento numérico)
-    const idMatch = url.match(/-(\d+)$/);
-    const id = idMatch ? idMatch[1] : url.split('/').pop() || 'unknown';
+    const idMatch = this.url.match(/-(\d+)$/);
+    return idMatch ? idMatch[1] : this.url.split('/').pop() || 'unknown';
+  }
 
-    // Converter preço para centavos
-    const price = this.parsePrice(rawAd.price);
+  protected title(): string {
+    return this.getRawAd().title;
+  }
 
-    // Converter ano
-    const year = rawAd.year ? parseInt(rawAd.year, 10) : null;
+  protected price(): number {
+    return this.parsePrice(this.getRawAd().price);
+  }
 
-    // Converter quilometragem
-    const mileage = rawAd.mileage ? parseInt(rawAd.mileage, 10) : null;
+  protected year(): number | null {
+    const rawAd = this.getRawAd();
+    return rawAd.year ? parseInt(rawAd.year, 10) : null;
+  }
 
-    // Extrair cidade e estado da localização
-    const { city, state } = this.parseLocation(rawAd.location);
+  protected mileage(): number | null {
+    const rawAd = this.getRawAd();
+    return rawAd.mileage ? parseInt(rawAd.mileage, 10) : null;
+  }
 
-    // Extrair marca e modelo do título
-    const { brand, model } = this.parseTitle(rawAd.title);
+  protected color(): string | null {
+    return this.getRawAd().color;
+  }
 
-    return {
-      id,
-      title: rawAd.title,
-      price,
-      year,
-      mileage,
-      color: rawAd.color,
-      fuel: rawAd.engine ? this.normalizeFuel(rawAd.engine) : null,
-      transmission: null, // OLX não fornece transmissão nos cards
-      brand,
-      model,
-      city,
-      state,
-      url,
-      imageUrl: rawAd.imageUrl,
-      publishedAt: null, // OLX não fornece data de publicação nos cards
-      source: SiteId.OLX,
-      metadata: {
-        engine: rawAd.engine,
-        carType: rawAd.carType,
-      },
-    };
+  protected fuel(): string | null {
+    const rawAd = this.getRawAd();
+    return rawAd.engine ? this.normalizeFuel(rawAd.engine) : null;
+  }
+
+  protected transmission(): string | null {
+    // OLX não fornece transmissão nos cards
+    return null;
+  }
+
+  protected brand(): string | null {
+    const { brand } = this.parseTitle(this.getRawAd().title);
+    return brand;
+  }
+
+  protected model(): string | null {
+    const { model } = this.parseTitle(this.getRawAd().title);
+    return model;
+  }
+
+  protected city(): string | null {
+    const { city } = this.parseLocation(this.getRawAd().location);
+    return city;
+  }
+
+  protected state(): string | null {
+    const { state } = this.parseLocation(this.getRawAd().location);
+    return state;
+  }
+
+  protected imageUrl(): string | null {
+    return this.getRawAd().imageUrl;
+  }
+
+  protected publishedAt(): Date | null {
+    // OLX não fornece data de publicação nos cards
+    return null;
+  }
+
+  protected source(): string {
+    return SiteId.OLX;
+  }
+
+  protected engine(): string | null {
+    return this.getRawAd().engine;
+  }
+
+  protected carType(): string | null {
+    return this.getRawAd().carType;
+  }
+
+  protected metadata(): Record<string, unknown> {
+    return {};
   }
 
   /**
@@ -110,7 +156,7 @@ export class OlxAdapter {
     if (!engine) return null;
 
     const normalized = engine.toLowerCase();
-    if (normalized.includes('flex') || normalized.includes('flex')) {
+    if (normalized.includes('flex')) {
       return 'flex';
     }
     if (normalized.includes('gasolina')) {

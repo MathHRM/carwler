@@ -74,7 +74,10 @@ export class OlxScraper extends BaseScraper {
 
       // Adaptar para CarAd
       const ads: CarAd[] = rawAds
-        .map((rawAd) => this.adapter.adapt(rawAd, rawAd.url))
+        .map((rawAd) => {
+          this.adapter.setPayload(rawAd, rawAd.url);
+          return this.adapter.adapt();
+        })
         .filter((ad) => ad.id && ad.title && ad.url);
 
       // Filtrar por preço máximo se especificado (já que a URL pode não filtrar corretamente)
