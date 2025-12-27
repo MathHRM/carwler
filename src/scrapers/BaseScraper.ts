@@ -93,7 +93,7 @@ export abstract class BaseScraper implements SiteScraper {
     try {
       logger.info(`Navegando para: ${url}`, { site: this.siteId });
       await page.goto(url, {
-        waitUntil: 'networkidle',
+        waitUntil: 'domcontentloaded',
         timeout: options?.timeout || config.playwright.timeout,
       });
 
