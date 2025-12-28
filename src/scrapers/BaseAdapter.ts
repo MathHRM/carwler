@@ -6,40 +6,39 @@ import type { CarAd } from '@domain/CarAd.js';
  */
 export abstract class BaseAdapter {
   protected rawPayload: unknown | null = null;
-  protected url: string = '';
 
   /**
    * Define o payload bruto e a URL para processamento
    */
-  setPayload(rawPayload: unknown, url: string): void {
+  setPayload(rawPayload: unknown): void {
     this.rawPayload = rawPayload;
-    this.url = url;
   }
 
   /**
    * Converte o payload bruto para o modelo normalizado CarAd
    * Implementa o Template Method que chama todos os métodos abstratos
+   * Pode ser assíncrono se os métodos de extração forem assíncronos
    */
-  adapt(): CarAd {
+  async adapt(): Promise<CarAd> {
     return {
-      id: this.id(),
-      title: this.title(),
-      price: this.price(),
-      year: this.year(),
-      mileage: this.mileage(),
-      color: this.color(),
-      fuel: this.fuel(),
+      id: await this.id(),
+      title: await this.title(),
+      price: await this.price(),
+      year: await this.year(),
+      mileage: await this.mileage(),
+      color: await this.color(),
+      fuel: await this.fuel(),
       transmission: this.transmission(),
-      brand: this.brand(),
-      model: this.model(),
-      city: this.city(),
-      state: this.state(),
-      url: this.url,
-      imageUrl: this.imageUrl(),
+      brand: await this.brand(),
+      model: await this.model(),
+      city: await this.city(),
+      state: await this.state(),
+      url: await this.url(),
+      imageUrl: await this.imageUrl(),
       publishedAt: this.publishedAt(),
       source: this.source(),
-      engine: this.engine(),
-      carType: this.carType(),
+      engine: await this.engine(),
+      carType: await this.carType(),
       metadata: {
         ...this.metadata(),
       },
@@ -48,24 +47,26 @@ export abstract class BaseAdapter {
 
   /**
    * Métodos abstratos que devem ser implementados por cada adapter
+   * Podem ser síncronos ou assíncronos dependendo da implementação
    */
-  protected abstract id(): string;
-  protected abstract title(): string;
-  protected abstract price(): number;
-  protected abstract year(): number | null;
-  protected abstract mileage(): number | null;
-  protected abstract color(): string | null;
-  protected abstract fuel(): string | null;
+  protected abstract id(): string | Promise<string>;
+  protected abstract title(): string | Promise<string>;
+  protected abstract price(): number | Promise<number>;
+  protected abstract year(): number | null | Promise<number | null>;
+  protected abstract mileage(): number | null | Promise<number | null>;
+  protected abstract color(): string | null | Promise<string | null>;
+  protected abstract fuel(): string | null | Promise<string | null>;
   protected abstract transmission(): string | null;
-  protected abstract brand(): string | null;
-  protected abstract model(): string | null;
-  protected abstract city(): string | null;
-  protected abstract state(): string | null;
-  protected abstract imageUrl(): string | null;
+  protected abstract brand(): string | null | Promise<string | null>;
+  protected abstract model(): string | null | Promise<string | null>;
+  protected abstract city(): string | null | Promise<string | null>;
+  protected abstract state(): string | null | Promise<string | null>;
+  protected abstract imageUrl(): string | null | Promise<string | null>;
   protected abstract publishedAt(): Date | null;
+  protected abstract url(): string | Promise<string>;
   protected abstract source(): string;
-  protected abstract engine(): string | null;
-  protected abstract carType(): string | null;
+  protected abstract engine(): string | null | Promise<string | null>;
+  protected abstract carType(): string | null | Promise<string | null>;
   protected abstract metadata(): Record<string, unknown>;
 }
 

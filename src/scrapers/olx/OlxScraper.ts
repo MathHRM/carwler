@@ -68,17 +68,21 @@ export class OlxScraper extends BaseScraper {
       // Navegar para a página
       await this.navigateToPage(page, searchUrl, options);
 
-      // Extrair anúncios
-      const rawAds = await this.listPage.extractAds(page);
-      logger.info(`${rawAds.length} anúncios brutos extraídos`);
+      // Extrair cards (Locators) da página
+      const adCards = await this.listPage.extractAds(page);
+      logger.info(`${adCards.length} cards extraídos da página`);
 
-      // Adaptar para CarAd
-      const ads: CarAd[] = rawAds
-        .map((rawAd) => {
-          this.adapter.setPayload(rawAd, rawAd.url);
-          return this.adapter.adapt();
-        })
-        .filter((ad) => ad.id && ad.title && ad.url);
+      // Adaptar cada card para CarAd
+      const ads: CarAd[] = [];
+      for (const card of adCards) {
+        try {
+          this.adapter.setPayload(card);
+          const ad = await this.adapter.adapt();
+          ads.push(ad);
+        } catch (error) {
+          logger.warn('Erro ao adaptar card para CarAd', { error });
+        }
+      }
 
       // Filtrar por preço máximo se especificado (já que a URL pode não filtrar corretamente)
       // maxPrice vem em reais, mas CarAd.price está em centavos

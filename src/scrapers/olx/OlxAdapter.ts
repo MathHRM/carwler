@@ -1,53 +1,84 @@
-import type { OlxRawAd } from './types.js';
+import type { Locator } from 'playwright';
 import { BaseAdapter } from '../BaseAdapter.js';
 import { SiteId } from '../SiteId.js';
 
 /**
  * Adapter para transformar dados brutos da OLX em CarAd normalizado
  * Segue o padrão Adapter
+ * Recebe um Locator do Playwright e extrai todos os dados diretamente do DOM
  */
 export class OlxAdapter extends BaseAdapter {
   /**
-   * Obtém o payload raw tipado
+   * Obtém o Locator do card
    */
-  private getRawAd(): OlxRawAd {
+  private getCard(): Locator {
     if (!this.rawPayload) {
       throw new Error('Payload não foi definido. Chame setPayload() antes de adapt().');
     }
-    return this.rawPayload as OlxRawAd;
+    return this.rawPayload as Locator;
   }
 
-  protected id(): string {
+  protected async id(): Promise<string> {
+    const url = await this.url();
     // Extrair ID da URL (último segmento numérico)
-    const idMatch = this.url.match(/-(\d+)$/);
-    return idMatch ? idMatch[1] : this.url.split('/').pop() || 'unknown';
+    const idMatch = url.match(/-(\d+)$/);
+    return idMatch ? idMatch[1] : url.split('/').pop() || 'unknown';
   }
 
-  protected title(): string {
-    return this.getRawAd().title;
+  protected async title(): Promise<string> {
+    const card = this.getCard();
+    const titleLink = card.locator('a[data-testid="adcard-link"]').first();
+    return (await titleLink.textContent())?.trim() || '';
   }
 
-  protected price(): number {
-    return this.parsePrice(this.getRawAd().price);
+  protected async price(): Promise<number> {
+    const card = this.getCard();
+    const priceElement = card.locator('h3.olx-adcard__price').first();
+    const priceText = (await priceElement.textContent())?.trim() || null;
+    return this.parsePrice(priceText);
   }
 
-  protected year(): number | null {
-    const rawAd = this.getRawAd();
-    return rawAd.year ? parseInt(rawAd.year, 10) : null;
+  protected async year(): Promise<number | null> {
+    const title = await this.title();
+    const yearMatch = title.match(/\b(19|20)\d{2}\b/);
+    return yearMatch ? parseInt(yearMatch[0], 10) : null;
   }
 
-  protected mileage(): number | null {
-    const rawAd = this.getRawAd();
-    return rawAd.mileage ? parseInt(rawAd.mileage, 10) : null;
+  protected async mileage(): Promise<number | null> {
+    const card = this.getCard();
+    const detailsContainer = card.locator('div.AdCard_autosDetails__9AiAP').first();
+    const detailElements = await detailsContainer.locator('div.olx-adcard__detail').all();
+
+    for (const detail of detailElements) {
+      const ariaLabel = (await detail.getAttribute('aria-label')) || '';
+      if (ariaLabel.includes('quilômetros') || ariaLabel.includes('quilometragem')) {
+        const text = (await detail.textContent())?.trim() || '';
+        const mileageStr = text.replace(/[^\d]/g, '');
+        return mileageStr ? parseInt(mileageStr, 10) : null;
+      }
+    }
+
+    return null;
   }
 
-  protected color(): string | null {
-    return this.getRawAd().color;
+  protected async color(): Promise<string | null> {
+    const card = this.getCard();
+    const detailsContainer = card.locator('div.AdCard_autosDetails__9AiAP').first();
+    const detailElements = await detailsContainer.locator('div.olx-adcard__detail').all();
+
+    for (const detail of detailElements) {
+      const ariaLabel = (await detail.getAttribute('aria-label')) || '';
+      if (ariaLabel.includes('Cor')) {
+        return (await detail.textContent())?.trim() || null;
+      }
+    }
+
+    return null;
   }
 
-  protected fuel(): string | null {
-    const rawAd = this.getRawAd();
-    return rawAd.engine ? this.normalizeFuel(rawAd.engine) : null;
+  protected async fuel(): Promise<string | null> {
+    const engine = await this.engine();
+    return engine ? this.normalizeFuel(engine) : null;
   }
 
   protected transmission(): string | null {
@@ -55,28 +86,34 @@ export class OlxAdapter extends BaseAdapter {
     return null;
   }
 
-  protected brand(): string | null {
-    const { brand } = this.parseTitle(this.getRawAd().title);
+  protected async brand(): Promise<string | null> {
+    const title = await this.title();
+    const { brand } = this.parseTitle(title);
     return brand;
   }
 
-  protected model(): string | null {
-    const { model } = this.parseTitle(this.getRawAd().title);
+  protected async model(): Promise<string | null> {
+    const title = await this.title();
+    const { model } = this.parseTitle(title);
     return model;
   }
 
-  protected city(): string | null {
-    const { city } = this.parseLocation(this.getRawAd().location);
+  protected async city(): Promise<string | null> {
+    const location = await this.getLocation();
+    const { city } = this.parseLocation(location);
     return city;
   }
 
-  protected state(): string | null {
-    const { state } = this.parseLocation(this.getRawAd().location);
+  protected async state(): Promise<string | null> {
+    const location = await this.getLocation();
+    const { state } = this.parseLocation(location);
     return state;
   }
 
-  protected imageUrl(): string | null {
-    return this.getRawAd().imageUrl;
+  protected async imageUrl(): Promise<string | null> {
+    const card = this.getCard();
+    const imageElement = card.locator('picture img').first();
+    return (await imageElement.getAttribute('src')) || null;
   }
 
   protected publishedAt(): Date | null {
@@ -88,12 +125,54 @@ export class OlxAdapter extends BaseAdapter {
     return SiteId.OLX;
   }
 
-  protected engine(): string | null {
-    return this.getRawAd().engine;
+  protected async engine(): Promise<string | null> {
+    const card = this.getCard();
+    const detailsContainer = card.locator('div.AdCard_autosDetails__9AiAP').first();
+    const detailElements = await detailsContainer.locator('div.olx-adcard__detail').all();
+
+    for (const detail of detailElements) {
+      const ariaLabel = (await detail.getAttribute('aria-label')) || '';
+      if (ariaLabel.includes('Motor')) {
+        return (await detail.textContent())?.trim() || null;
+      }
+    }
+
+    return null;
   }
 
-  protected carType(): string | null {
-    return this.getRawAd().carType;
+  protected async carType(): Promise<string | null> {
+    const card = this.getCard();
+    const detailsContainer = card.locator('div.AdCard_autosDetails__9AiAP').first();
+    const detailElements = await detailsContainer.locator('div.olx-adcard__detail').all();
+
+    for (const detail of detailElements) {
+      const ariaLabel = (await detail.getAttribute('aria-label')) || '';
+      if (ariaLabel.includes('tipo')) {
+        return (await detail.textContent())?.trim() || null;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Extrai a URL do card
+   */
+  protected async url(): Promise<string> {
+    const card = this.getCard();
+    const titleLink = card.locator('a[data-testid="adcard-link"]').first();
+    const url = (await titleLink.getAttribute('href')) || '';
+    // Garantir URL completa
+    return url.startsWith('http') ? url : `https://www.olx.com.br${url}`;
+  }
+
+  /**
+   * Extrai a localização do card
+   */
+  private async getLocation(): Promise<string | null> {
+    const card = this.getCard();
+    const locationElement = card.locator('p.olx-adcard__location').first();
+    return (await locationElement.textContent())?.trim() || null;
   }
 
   protected metadata(): Record<string, unknown> {

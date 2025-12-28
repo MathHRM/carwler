@@ -1,5 +1,4 @@
-import type { Page } from 'playwright';
-import type { OlxRawAd } from './types.js';
+import type { Page, Locator } from 'playwright';
 import { logger } from '@infra/logger.js';
 
 /**
@@ -8,8 +7,9 @@ import { logger } from '@infra/logger.js';
 export class OlxListPage {
   /**
    * Extrai todos os anúncios de uma página de listagem
+   * Retorna apenas os Locators dos cards, sem processar os dados
    */
-  async extractAds(page: Page): Promise<OlxRawAd[]> {
+  async extractAds(page: Page): Promise<Locator[]> {
     logger.debug('Extraindo anúncios da página de listagem OLX');
 
     try {
@@ -19,21 +19,21 @@ export class OlxListPage {
       // Seletores da OLX
       const adCards = await page.locator('section.olx-adcard').all();
 
-      const ads: OlxRawAd[] = [];
+      const validCards: Locator[] = [];
 
       for (const card of adCards) {
         try {
-          const ad = await this.extractAdFromCard(card);
-          if (ad) {
-            ads.push(ad);
+          const isValid = await this.isValidCard(card);
+          if (isValid) {
+            validCards.push(card);
           }
         } catch (error) {
-          logger.warn('Erro ao extrair anúncio individual', { error });
+          logger.warn('Erro ao validar card individual', { error });
         }
       }
 
-      logger.info(`Extraídos ${ads.length} anúncios da página`);
-      return ads;
+      logger.info(`Extraídos ${validCards.length} cards válidos da página`);
+      return validCards;
     } catch (error) {
       logger.error('Erro ao extrair anúncios da listagem', { error });
       throw error;
@@ -41,79 +41,19 @@ export class OlxListPage {
   }
 
   /**
-   * Extrai dados de um card de anúncio individual
+   * Valida se um card tem os dados mínimos necessários (título e URL)
+   * Retorna true se o card é válido, false caso contrário
    */
-  private async extractAdFromCard(
-    card: import('playwright').Locator
-  ): Promise<OlxRawAd | null> {
+  private async isValidCard(card: Locator): Promise<boolean> {
     try {
-      // Extrair título e URL
       const titleLink = card.locator('a[data-testid="adcard-link"]').first();
       const title = (await titleLink.textContent())?.trim() || '';
       const url = (await titleLink.getAttribute('href')) || '';
 
-      if (!title || !url) {
-        return null;
-      }
-
-      // Garantir URL completa
-      const fullUrl = url.startsWith('http') ? url : `https://www.olx.com.br${url}`;
-
-      // Extrair preço
-      const priceElement = card.locator('h3.olx-adcard__price').first();
-      const priceText = (await priceElement.textContent())?.trim() || null;
-
-      // Extrair localização
-      const locationElement = card.locator('p.olx-adcard__location').first();
-      const location = (await locationElement.textContent())?.trim() || null;
-
-      // Extrair imagem
-      const imageElement = card.locator('picture img').first();
-      const imageUrl = (await imageElement.getAttribute('src')) || null;
-
-      // Extrair detalhes (km, cor, motor, tipo)
-      const detailsContainer = card.locator('div.AdCard_autosDetails__9AiAP').first();
-      const detailElements = await detailsContainer.locator('div.olx-adcard__detail').all();
-
-      let mileage: string | null = null;
-      let color: string | null = null;
-      let engine: string | null = null;
-      let carType: string | null = null;
-
-      for (const detail of detailElements) {
-        const ariaLabel = (await detail.getAttribute('aria-label')) || '';
-        const text = (await detail.textContent())?.trim() || '';
-
-        if (ariaLabel.includes('quilômetros') || ariaLabel.includes('quilometragem')) {
-          mileage = text.replace(/[^\d]/g, '');
-        } else if (ariaLabel.includes('Cor')) {
-          color = text;
-        } else if (ariaLabel.includes('Motor')) {
-          engine = text;
-        } else if (ariaLabel.includes('tipo')) {
-          carType = text;
-        }
-      }
-
-      // Tentar extrair ano do título (ex: "Fiat Palio 1.0 2004")
-      const yearMatch = title.match(/\b(19|20)\d{2}\b/);
-      const year = yearMatch ? yearMatch[0] : null;
-
-      return {
-        title,
-        price: priceText,
-        location,
-        url: fullUrl,
-        imageUrl,
-        mileage,
-        color,
-        engine,
-        carType,
-        year,
-      };
+      return !!(title && url);
     } catch (error) {
-      logger.debug('Erro ao extrair dados do card', { error });
-      return null;
+      logger.debug('Erro ao validar card', { error });
+      return false;
     }
   }
 
