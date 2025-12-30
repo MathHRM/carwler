@@ -19,41 +19,11 @@ export class OlxListPage {
       // Seletores da OLX
       const adCards = await page.locator('section.olx-adcard').all();
 
-      const validCards: Locator[] = [];
-
-      for (const card of adCards) {
-        try {
-          const isValid = await this.isValidCard(card);
-          if (isValid) {
-            validCards.push(card);
-          }
-        } catch (error) {
-          logger.warn('Erro ao validar card individual', { error });
-        }
-      }
-
-      logger.info(`Extraídos ${validCards.length} cards válidos da página`);
-      return validCards;
+      logger.info(`Extraídos ${adCards.length} cards válidos da página`);
+      return adCards;
     } catch (error) {
       logger.error('Erro ao extrair anúncios da listagem', { error });
       throw error;
-    }
-  }
-
-  /**
-   * Valida se um card tem os dados mínimos necessários (título e URL)
-   * Retorna true se o card é válido, false caso contrário
-   */
-  private async isValidCard(card: Locator): Promise<boolean> {
-    try {
-      const titleLink = card.locator('a[data-testid="adcard-link"]').first();
-      const title = (await titleLink.textContent())?.trim() || '';
-      const url = (await titleLink.getAttribute('href')) || '';
-
-      return !!(title && url);
-    } catch (error) {
-      logger.debug('Erro ao validar card', { error });
-      return false;
     }
   }
 

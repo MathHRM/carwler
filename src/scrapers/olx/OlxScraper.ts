@@ -51,19 +51,19 @@ export class OlxScraper extends BaseScraper {
   }
 
   /**
-   * Faz scraping de uma página de listagem
+   * Extrai URLs dos anúncios de uma página de listagem
    */
-  async scrapeList(
+  async scrapeCarAdUrlList(
     page: Page,
     searchArgs: SearchArgs,
     options?: ScrapingOptions
-  ): Promise<ScrapingResult<CarAd[]>> {
+  ): Promise<ScrapingResult<string[]>> {
     const startTime = Date.now();
 
     try {
       // Construir URL de busca
       const searchUrl = this.buildSearchUrl(searchArgs);
-      logger.info(`Fazendo scraping da OLX: ${searchUrl}`, { searchArgs });
+      logger.info(`Extraindo URLs de anúncios da OLX: ${searchUrl}`, { searchArgs });
 
       // Navegar para a página
       await this.navigateToPage(page, searchUrl, options);
@@ -72,38 +72,29 @@ export class OlxScraper extends BaseScraper {
       const adCards = await this.listPage.extractAds(page);
       logger.info(`${adCards.length} cards extraídos da página`);
 
-      // Adaptar cada card para CarAd
-      const ads: CarAd[] = [];
+      // Extrair URLs de cada card
+      const urls: string[] = [];
       for (const card of adCards) {
         try {
-          this.adapter.setPayload(card);
-          const ad = await this.adapter.adapt();
-          ads.push(ad);
+          const titleLink = card.locator('a[data-testid="adcard-link"]').first();
+          const url = (await titleLink.getAttribute('href')) || '';
+          if (url) {
+            // Garantir URL completa
+            const fullUrl = url.startsWith('http') ? url : `https://www.olx.com.br${url}`;
+            urls.push(fullUrl);
+          }
         } catch (error) {
-          logger.warn('Erro ao adaptar card para CarAd', { error });
+          logger.warn('Erro ao extrair URL do card', { error });
         }
       }
 
-      // Filtrar por preço máximo se especificado (já que a URL pode não filtrar corretamente)
-      // maxPrice vem em reais, mas CarAd.price está em centavos
-      const filteredAds =
-        searchArgs.maxPrice !== undefined
-          ? ads.filter((ad) => ad.price <= searchArgs.maxPrice! * 100)
-          : ads;
-
-      // Filtrar por ano máximo se especificado
-      const finalAds =
-        searchArgs.maxYear !== undefined
-          ? filteredAds.filter((ad) => !ad.year || ad.year <= searchArgs.maxYear!)
-          : filteredAds;
-
       const duration = Date.now() - startTime;
 
-      logger.info(`${finalAds.length} anúncios normalizados após filtros`);
+      logger.info(`${urls.length} URLs extraídas da página`);
 
       return {
         success: true,
-        data: finalAds,
+        data: urls,
         metadata: {
           url: searchUrl,
           timestamp: new Date(),
@@ -113,7 +104,7 @@ export class OlxScraper extends BaseScraper {
     } catch (error) {
       const duration = Date.now() - startTime;
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('Erro ao fazer scraping da listagem OLX', { error, searchArgs });
+      logger.error('Erro ao extrair URLs da listagem OLX', { error, searchArgs });
 
       return {
         success: false,
@@ -125,6 +116,130 @@ export class OlxScraper extends BaseScraper {
         },
       };
     }
+  }
+
+  /**
+   * Faz scraping de páginas detalhadas a partir de uma lista de URLs
+   */
+  async scrapeDetailedList(
+    page: Page,
+    urls: string[],
+    searchArgs: SearchArgs,
+    options?: ScrapingOptions
+  ): Promise<ScrapingResult<CarAd[]>> {
+    const startTime = Date.now();
+    const ads: CarAd[] = [];
+    const errors: string[] = [];
+
+    try {
+      logger.info(`Fazendo scraping de ${urls.length} páginas detalhadas da OLX`);
+
+      for (const url of urls) {
+        try {
+          // Navegar para a página detalhada
+          await this.navigateToPage(page, url, options);
+
+          // Aguardar carregamento da página
+          await page.waitForSelector('div#description-title', { timeout: options?.timeout || 10000 }).catch(() => {
+            throw new Error('Página não carregou corretamente');
+          });
+
+          // Obter Locator da página (usar body como container)
+          const pageLocator = page.locator('body');
+
+          // Adaptar página detalhada para CarAd
+          this.adapter.setPayload(pageLocator, url);
+          const ad = await this.adapter.adapt();
+
+          // Aplicar filtros
+          let shouldInclude = true;
+
+          // Filtrar por preço máximo se especificado (maxPrice vem em reais, mas CarAd.price está em centavos)
+          if (searchArgs.maxPrice !== undefined && ad.price > searchArgs.maxPrice * 100) {
+            shouldInclude = false;
+          }
+
+          // Filtrar por ano máximo se especificado
+          if (searchArgs.maxYear !== undefined && ad.year && ad.year > searchArgs.maxYear) {
+            shouldInclude = false;
+          }
+
+          if (shouldInclude) {
+            ads.push(ad);
+          }
+
+          // Delay entre requisições se especificado
+          if (options?.delay && urls.indexOf(url) < urls.length - 1) {
+            await new Promise((resolve) => setTimeout(resolve, options.delay));
+          }
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          logger.warn('Erro ao fazer scraping de página detalhada', { url, error: errorMessage });
+          errors.push(`${url}: ${errorMessage}`);
+        }
+      }
+
+      const duration = Date.now() - startTime;
+
+      logger.info(`${ads.length} anúncios normalizados após filtros (${errors.length} erros)`);
+
+      return {
+        success: true,
+        data: ads,
+        metadata: {
+          timestamp: new Date(),
+          duration,
+        },
+      };
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('Erro ao fazer scraping das páginas detalhadas OLX', { error, urls });
+
+      return {
+        success: false,
+        data: ads.length > 0 ? ads : null,
+        error: errorMessage,
+        metadata: {
+          timestamp: new Date(),
+          duration,
+        },
+      };
+    }
+  }
+
+  /**
+   * Implementação do método abstrato scrapeList para compatibilidade
+   * Agora delega para scrapeCarAdUrlList e scrapeDetailedList
+   */
+  async scrapeList(
+    page: Page,
+    searchArgs: SearchArgs,
+    options?: ScrapingOptions
+  ): Promise<ScrapingResult<CarAd[]>> {
+    // Primeiro extrair URLs
+    const urlResult = await this.scrapeCarAdUrlList(page, searchArgs, options);
+    
+    if (!urlResult.success || !urlResult.data) {
+      return {
+        success: false,
+        data: null,
+        error: urlResult.error || 'Falha ao extrair URLs',
+        metadata: urlResult.metadata,
+      };
+    }
+
+    // Garantir que data é um array de strings (não array de arrays)
+    let urls: string[] = [];
+    if (urlResult.data && Array.isArray(urlResult.data)) {
+      // Verificar se é array de strings ou array de arrays
+      if (urlResult.data.length > 0 && typeof urlResult.data[0] === 'string') {
+        urls = urlResult.data as string[];
+      }
+    }
+
+    // Depois fazer scraping detalhado
+    return this.scrapeDetailedList(page, urls, searchArgs, options);
   }
 
   /**

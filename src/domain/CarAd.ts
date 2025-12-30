@@ -33,6 +33,8 @@ export interface CarAd {
   url: string;
   /** URL da imagem principal do anúncio */
   imageUrl: string | null;
+  /** URLs de todas as imagens do anúncio */
+  imageUrls: string[];
   /** Data de publicação do anúncio */
   publishedAt: Date | null;
   /** Site de origem (olx, webmotors, facebook, etc.) */
@@ -41,6 +43,36 @@ export interface CarAd {
   engine: string | null;
   /** Tipo de veículo */
   carType: string | null;
+  /** Direção (Elétrica, Hidráulica, etc.) */
+  steering: string | null;
+  /** Portas (4 Portas, etc.) */
+  doors: string | null;
+  /** Possui Kit GNV */
+  hasGNV: boolean | null;
+  /** Bairro */
+  neighborhood: string | null;
+  /** CEP */
+  zipCode: string | null;
+  /** Nome do vendedor */
+  sellerName: string | null;
+  /** Tipo de vendedor (PROFISSIONAL/PARTICULAR) */
+  sellerType: string | null;
+  /** Reputação/Nível do vendedor */
+  sellerReputation: string | null;
+  /** Tempo na OLX */
+  sellerTimeOnOlx: string | null;
+  /** Preço Médio OLX (em centavos) */
+  averagePrice: number | null;
+  /** Preço FIPE (em centavos) */
+  fipePrice: number | null;
+  /** Parcela estimada */
+  installment: string | null;
+  /** Entrada estimada */
+  downPayment: string | null;
+  /** Lista de opcionais */
+  optionalFeatures: string[];
+  /** Lista de informações extras */
+  extraInfo: string[];
   /** Dados adicionais específicos do site (opcional) */
   metadata?: Record<string, unknown>;
 }

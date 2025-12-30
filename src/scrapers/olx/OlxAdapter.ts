@@ -5,13 +5,25 @@ import { SiteId } from '../SiteId.js';
 /**
  * Adapter para transformar dados brutos da OLX em CarAd normalizado
  * Segue o padrão Adapter
- * Recebe um Locator do Playwright e extrai todos os dados diretamente do DOM
+ * Recebe um Locator do Playwright da página detalhada e extrai todos os dados diretamente do DOM
  */
 export class OlxAdapter extends BaseAdapter {
+  private currentUrl: string = '';
+
   /**
-   * Obtém o Locator do card
+   * Define o payload e a URL atual
    */
-  private getCard(): Locator {
+  setPayload(rawPayload: unknown, url?: string): void {
+    super.setPayload(rawPayload);
+    if (url) {
+      this.currentUrl = url;
+    }
+  }
+
+  /**
+   * Obtém o Locator da página detalhada
+   */
+  private getPage(): Locator {
     if (!this.rawPayload) {
       throw new Error('Payload não foi definido. Chame setPayload() antes de adapt().');
     }
@@ -26,102 +38,130 @@ export class OlxAdapter extends BaseAdapter {
   }
 
   protected async title(): Promise<string> {
-    const card = this.getCard();
-    const titleLink = card.locator('a[data-testid="adcard-link"]').first();
-    return (await titleLink.textContent())?.trim() || '';
+    const page = this.getPage();
+    const titleElement = page.locator('div#description-title .bdcWAn').first();
+    return (await titleElement.textContent())?.trim() || '';
   }
 
-  protected description(): string | null {
-    return null;
+  protected async description(): Promise<string | null> {
+    const page = this.getPage();
+    const descElement = page.locator('div[data-section="description"] span.typo-body-medium').first();
+    const text = (await descElement.textContent())?.trim() || null;
+    return text || null;
   }
 
   protected async price(): Promise<number> {
-    const card = this.getCard();
-    const priceElement = card.locator('h3.olx-adcard__price').first();
+    const page = this.getPage();
+    const priceElement = page.locator('div#price-box-container .typo-title-large').first();
     const priceText = (await priceElement.textContent())?.trim() || null;
     return this.parsePrice(priceText);
   }
 
   protected async year(): Promise<number | null> {
-    const title = await this.title();
-    const yearMatch = title.match(/\b(19|20)\d{2}\b/);
-    return yearMatch ? parseInt(yearMatch[0], 10) : null;
+    const page = this.getPage();
+    const yearElement = page.locator('div:has(> span:text-is("Ano")) a').first();
+    const yearText = (await yearElement.textContent())?.trim() || null;
+    if (yearText) {
+      const yearMatch = yearText.match(/\b(19|20)\d{2}\b/);
+      return yearMatch ? parseInt(yearMatch[0], 10) : null;
+    }
+    return null;
   }
 
   protected async mileage(): Promise<number | null> {
-    const card = this.getCard();
-    const detailsContainer = card.locator('div.AdCard_autosDetails__9AiAP').first();
-    const detailElements = await detailsContainer.locator('div.olx-adcard__detail').all();
-
-    for (const detail of detailElements) {
-      const ariaLabel = (await detail.getAttribute('aria-label')) || '';
-      if (ariaLabel.includes('quilômetros') || ariaLabel.includes('quilometragem')) {
-        const text = (await detail.textContent())?.trim() || '';
-        const mileageStr = text.replace(/[^\d]/g, '');
-        return mileageStr ? parseInt(mileageStr, 10) : null;
-      }
+    const page = this.getPage();
+    const mileageElement = page.locator('div:has(> span:text-is("Quilometragem")) span.ekhFnR').first();
+    const mileageText = (await mileageElement.textContent())?.trim() || null;
+    if (mileageText) {
+      const mileageStr = mileageText.replace(/[^\d]/g, '');
+      return mileageStr ? parseInt(mileageStr, 10) : null;
     }
-
     return null;
   }
 
   protected async color(): Promise<string | null> {
-    const card = this.getCard();
-    const detailsContainer = card.locator('div.AdCard_autosDetails__9AiAP').first();
-    const detailElements = await detailsContainer.locator('div.olx-adcard__detail').all();
-
-    for (const detail of detailElements) {
-      const ariaLabel = (await detail.getAttribute('aria-label')) || '';
-      if (ariaLabel.includes('Cor')) {
-        return (await detail.textContent())?.trim() || null;
-      }
-    }
-
-    return null;
+    const page = this.getPage();
+    const colorElement = page.locator('div:has(> span:text-is("Cor")) span.ekhFnR').first();
+    return (await colorElement.textContent())?.trim() || null;
   }
 
   protected async fuel(): Promise<string | null> {
-    const engine = await this.engine();
-    return engine ? this.normalizeFuel(engine) : null;
+    const page = this.getPage();
+    const fuelElement = page.locator('div:has(> span:text-is("Combustível")) a').first();
+    const fuelText = (await fuelElement.textContent())?.trim() || null;
+    return fuelText ? this.normalizeFuel(fuelText) : null;
   }
 
-  protected transmission(): string | null {
-    // OLX não fornece transmissão nos cards
-    return null;
+  protected async transmission(): Promise<string | null> {
+    const page = this.getPage();
+    const transmissionElement = page.locator('div:has(> span:text-is("Câmbio")) span.ekhFnR').first();
+    return (await transmissionElement.textContent())?.trim() || null;
   }
 
   protected async brand(): Promise<string | null> {
-    const title = await this.title();
-    const { brand } = this.parseTitle(title);
-    return brand;
+    const page = this.getPage();
+    const brandElement = page.locator('div:has(> span:text-is("Marca")) a').first();
+    return (await brandElement.textContent())?.trim() || null;
   }
 
   protected async model(): Promise<string | null> {
-    const title = await this.title();
-    const { model } = this.parseTitle(title);
-    return model;
+    const page = this.getPage();
+    const modelElement = page.locator('div:has(> span:text-is("Modelo")) a').first();
+    return (await modelElement.textContent())?.trim() || null;
   }
 
   protected async city(): Promise<string | null> {
-    const location = await this.getLocation();
-    const { city } = this.parseLocation(location);
-    return city;
+    const page = this.getPage();
+    const cityElement = page.locator('#location .font-semibold').first();
+    return (await cityElement.textContent())?.trim() || null;
   }
 
   protected async state(): Promise<string | null> {
-    const location = await this.getLocation();
-    const { state } = this.parseLocation(location);
-    return state;
+    const page = this.getPage();
+    const stateElement = page.locator('#location .text-neutral-110').first();
+    const stateText = (await stateElement.textContent())?.trim() || null;
+    if (stateText) {
+      // Formato: "MG, 37270000" - extrair estado
+      const parts = stateText.split(',').map((p) => p.trim());
+      return parts[0] || null;
+    }
+    return null;
   }
 
   protected async imageUrl(): Promise<string | null> {
-    const card = this.getCard();
-    const imageElement = card.locator('picture img').first();
-    return (await imageElement.getAttribute('src')) || null;
+    const urls = await this.imageUrls();
+    return urls.length > 0 ? urls[0] : null;
   }
 
-  protected publishedAt(): Date | null {
-    // OLX não fornece data de publicação nos cards
+  protected async imageUrls(): Promise<string[]> {
+    const page = this.getPage();
+    const imageElements = await page.locator('div#gallery img').all();
+    const urls: string[] = [];
+    
+    for (const img of imageElements) {
+      const src = await img.getAttribute('src');
+      const srcset = await img.getAttribute('srcset');
+      if (src) {
+        urls.push(src);
+      } else if (srcset) {
+        // srcset pode ter múltiplas URLs, pegar a primeira
+        const firstUrl = srcset.split(',')[0]?.trim().split(' ')[0];
+        if (firstUrl) {
+          urls.push(firstUrl);
+        }
+      }
+    }
+    
+    return urls;
+  }
+
+  protected async publishedAt(): Promise<Date | null> {
+    const page = this.getPage();
+    const dateElement = page.locator('div.ad__sc-ihngls-0 span.font-semibold').first();
+    const dateText = (await dateElement.textContent())?.trim() || null;
+    if (dateText) {
+      return this.parsePublishedDate(dateText);
+    }
     return null;
   }
 
@@ -130,53 +170,149 @@ export class OlxAdapter extends BaseAdapter {
   }
 
   protected async engine(): Promise<string | null> {
-    const card = this.getCard();
-    const detailsContainer = card.locator('div.AdCard_autosDetails__9AiAP').first();
-    const detailElements = await detailsContainer.locator('div.olx-adcard__detail').all();
-
-    for (const detail of detailElements) {
-      const ariaLabel = (await detail.getAttribute('aria-label')) || '';
-      if (ariaLabel.includes('Motor')) {
-        return (await detail.textContent())?.trim() || null;
-      }
-    }
-
+    // Engine não está na tabela fornecida, manter lógica anterior se necessário
+    // Por enquanto retornar null, pode ser extraído de outros campos se necessário
     return null;
   }
 
   protected async carType(): Promise<string | null> {
-    const card = this.getCard();
-    const detailsContainer = card.locator('div.AdCard_autosDetails__9AiAP').first();
-    const detailElements = await detailsContainer.locator('div.olx-adcard__detail').all();
-
-    for (const detail of detailElements) {
-      const ariaLabel = (await detail.getAttribute('aria-label')) || '';
-      if (ariaLabel.includes('tipo')) {
-        return (await detail.textContent())?.trim() || null;
-      }
-    }
-
+    // CarType não está na tabela fornecida, manter lógica anterior se necessário
     return null;
   }
 
   /**
-   * Extrai a URL do card
+   * Extrai a URL da página detalhada
    */
   protected async url(): Promise<string> {
-    const card = this.getCard();
-    const titleLink = card.locator('a[data-testid="adcard-link"]').first();
-    const url = (await titleLink.getAttribute('href')) || '';
-    // Garantir URL completa
-    return url.startsWith('http') ? url : `https://www.olx.com.br${url}`;
+    return this.currentUrl;
   }
 
-  /**
-   * Extrai a localização do card
-   */
-  private async getLocation(): Promise<string | null> {
-    const card = this.getCard();
-    const locationElement = card.locator('p.olx-adcard__location').first();
-    return (await locationElement.textContent())?.trim() || null;
+  protected async steering(): Promise<string | null> {
+    const page = this.getPage();
+    const steeringElement = page.locator('div:has(> span:text-is("Direção")) span.ekhFnR').first();
+    return (await steeringElement.textContent())?.trim() || null;
+  }
+
+  protected async doors(): Promise<string | null> {
+    const page = this.getPage();
+    const doorsElement = page.locator('div:has(> span:text-is("Portas")) span.ekhFnR').first();
+    return (await doorsElement.textContent())?.trim() || null;
+  }
+
+  protected async hasGNV(): Promise<boolean | null> {
+    const page = this.getPage();
+    const gnvElement = page.locator('div:has(> span:text-is("Possui Kit GNV")) span.ekhFnR').first();
+    const gnvText = (await gnvElement.textContent())?.trim() || null;
+    if (!gnvText) return null;
+    const normalized = gnvText.toLowerCase();
+    return normalized.includes('sim') || normalized.includes('yes');
+  }
+
+  protected async neighborhood(): Promise<string | null> {
+    const page = this.getPage();
+    const locationElements = await page.locator('#location .font-semibold').all();
+    // Primeiro elemento é cidade/bairro, segundo pode ser bairro se houver
+    if (locationElements.length > 1) {
+      return (await locationElements[1].textContent())?.trim() || null;
+    }
+    return null;
+  }
+
+  protected async zipCode(): Promise<string | null> {
+    const page = this.getPage();
+    const stateElement = page.locator('#location .text-neutral-110').first();
+    const stateText = (await stateElement.textContent())?.trim() || null;
+    if (stateText) {
+      // Formato: "MG, 37270000" - extrair CEP
+      const parts = stateText.split(',').map((p) => p.trim());
+      const cep = parts[1] || null;
+      return cep && /^\d{8}$/.test(cep.replace(/\D/g, '')) ? cep.replace(/\D/g, '') : null;
+    }
+    return null;
+  }
+
+  protected async sellerName(): Promise<string | null> {
+    const page = this.getPage();
+    const sellerElement = page.locator('.ad__sc-ypp2u2-4').first();
+    return (await sellerElement.textContent())?.trim() || null;
+  }
+
+  protected async sellerType(): Promise<string | null> {
+    const page = this.getPage();
+    const typeElement = page.locator('.ad__sc-ypp2u2-1 span.typo-overline').first();
+    return (await typeElement.textContent())?.trim() || null;
+  }
+
+  protected async sellerReputation(): Promise<string | null> {
+    const page = this.getPage();
+    const reputationElement = page.locator('.olx-core-badge--secondary').first();
+    return (await reputationElement.textContent())?.trim() || null;
+  }
+
+  protected async sellerTimeOnOlx(): Promise<string | null> {
+    const page = this.getPage();
+    const timeElement = page.locator('span:text-is("Na OLX desde")').first();
+    const timeText = (await timeElement.textContent())?.trim() || null;
+    if (timeText) {
+      // Extrair apenas a parte após "Na OLX desde"
+      const match = timeText.match(/Na OLX desde\s+(.+)/i);
+      return match ? match[1].trim() : timeText;
+    }
+    return null;
+  }
+
+  protected async averagePrice(): Promise<number | null> {
+    const page = this.getPage();
+    const priceElement = page.locator('div:has-text("Preço Médio OLX") span.olx-text--bold').first();
+    const priceText = (await priceElement.textContent())?.trim() || null;
+    return priceText ? this.parsePrice(priceText) : null;
+  }
+
+  protected async fipePrice(): Promise<number | null> {
+    const page = this.getPage();
+    const priceElement = page.locator('div:has-text("preço fipe") span.olx-text--bold').first();
+    const priceText = (await priceElement.textContent())?.trim() || null;
+    return priceText ? this.parsePrice(priceText) : null;
+  }
+
+  protected async installment(): Promise<string | null> {
+    const page = this.getPage();
+    const installmentElements = await page.locator('.text-secondary-100').all();
+    if (installmentElements.length > 0) {
+      return (await installmentElements[0].textContent())?.trim() || null;
+    }
+    return null;
+  }
+
+  protected async downPayment(): Promise<string | null> {
+    const page = this.getPage();
+    const downPaymentElements = await page.locator('.text-secondary-100').all();
+    if (downPaymentElements.length > 1) {
+      return (await downPaymentElements[1].textContent())?.trim() || null;
+    }
+    return null;
+  }
+
+  protected async optionalFeatures(): Promise<string[]> {
+    const page = this.getPage();
+    const featuresElement = page.locator('.ad__sc-1jr3zuf-1 >> nth=0 >> span.font-semibold').first();
+    const featuresText = (await featuresElement.textContent())?.trim() || null;
+    if (featuresText) {
+      // Dividir por vírgula ou quebra de linha
+      return featuresText.split(/[,\n]/).map((f) => f.trim()).filter((f) => f.length > 0);
+    }
+    return [];
+  }
+
+  protected async extraInfo(): Promise<string[]> {
+    const page = this.getPage();
+    const extraElement = page.locator('.ad__sc-1jr3zuf-1 >> nth=1 >> span.font-semibold').first();
+    const extraText = (await extraElement.textContent())?.trim() || null;
+    if (extraText) {
+      // Dividir por vírgula ou quebra de linha
+      return extraText.split(/[,\n]/).map((e) => e.trim()).filter((e) => e.length > 0);
+    }
+    return [];
   }
 
   protected metadata(): Record<string, unknown> {
@@ -201,36 +337,6 @@ export class OlxAdapter extends BaseAdapter {
     return isNaN(value) ? 0 : Math.round(value * 100);
   }
 
-  /**
-   * Extrai cidade e estado da string de localização
-   */
-  private parseLocation(location: string | null): { city: string | null; state: string | null } {
-    if (!location) return { city: null, state: null };
-
-    // Formato: "Belo Horizonte, Tirol (Barreiro)" ou "Cidade, Estado"
-    const parts = location.split(',').map((p) => p.trim());
-    const city = parts[0] || null;
-    const state = parts[1]?.match(/\(([^)]+)\)/)?.[1] || parts[1] || null;
-
-    return { city, state };
-  }
-
-  /**
-   * Extrai marca e modelo do título
-   */
-  private parseTitle(title: string): { brand: string | null; model: string | null } {
-    if (!title) return { brand: null, model: null };
-
-    // Formato comum: "Marca Modelo Versão Ano"
-    // Ex: "Fiat Palio 1.0/ Trofeo 1.0 Fire/ Fire Flex 4P 2004"
-    const words = title.split(/\s+/);
-    const brand = words[0] || null;
-
-    // Modelo geralmente são as palavras 1-3
-    const model = words.slice(1, 4).join(' ').trim() || null;
-
-    return { brand, model };
-  }
 
   /**
    * Normaliza tipo de combustível
@@ -256,6 +362,46 @@ export class OlxAdapter extends BaseAdapter {
     }
 
     return engine;
+  }
+
+  /**
+   * Parse data de publicação no formato "29/12 às 15:26"
+   */
+  private parsePublishedDate(dateText: string): Date | null {
+    try {
+      // Formato: "29/12 às 15:26" ou similar
+      // Assumir ano atual se não especificado
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      
+      // Extrair dia e mês
+      const match = dateText.match(/(\d{1,2})\/(\d{1,2})/);
+      if (match) {
+        const day = parseInt(match[1], 10);
+        const month = parseInt(match[2], 10) - 1; // Mês é 0-indexed
+        
+        // Extrair hora e minuto se disponível
+        const timeMatch = dateText.match(/(\d{1,2}):(\d{2})/);
+        let hour = 0;
+        let minute = 0;
+        if (timeMatch) {
+          hour = parseInt(timeMatch[1], 10);
+          minute = parseInt(timeMatch[2], 10);
+        }
+        
+        const date = new Date(currentYear, month, day, hour, minute);
+        
+        // Se a data for no futuro, assumir ano anterior
+        if (date > now) {
+          date.setFullYear(currentYear - 1);
+        }
+        
+        return date;
+      }
+    } catch (error) {
+      // Se falhar, retornar null
+    }
+    return null;
   }
 }
 
