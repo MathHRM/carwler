@@ -7,6 +7,8 @@ export interface CarAd {
   id: string;
   /** Nome/título do anúncio */
   title: string;
+  /** Descrição do anúncio */
+  description: string | null;
   /** Preço do veículo em centavos (para evitar problemas com ponto flutuante) */
   price: number;
   /** Ano do veículo */

@@ -31,6 +31,10 @@ export class OlxAdapter extends BaseAdapter {
     return (await titleLink.textContent())?.trim() || '';
   }
 
+  protected description(): string | null {
+    return null;
+  }
+
   protected async price(): Promise<number> {
     const card = this.getCard();
     const priceElement = card.locator('h3.olx-adcard__price').first();

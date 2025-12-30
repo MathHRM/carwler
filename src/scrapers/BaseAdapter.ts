@@ -23,6 +23,7 @@ export abstract class BaseAdapter {
     return {
       id: await this.id(),
       title: await this.title(),
+      description: await this.description(),
       price: await this.price(),
       year: await this.year(),
       mileage: await this.mileage(),
@@ -51,6 +52,7 @@ export abstract class BaseAdapter {
    */
   protected abstract id(): string | Promise<string>;
   protected abstract title(): string | Promise<string>;
+  protected abstract description(): string | null | Promise<string | null>;
   protected abstract price(): number | Promise<number>;
   protected abstract year(): number | null | Promise<number | null>;
   protected abstract mileage(): number | null | Promise<number | null>;
