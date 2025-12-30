@@ -1,0 +1,14 @@
+services:
+  app:
+    build:
+      context: .
+      target: development # Alvo do multi-stage build
+    container_name: playwright_app
+    ipc: host # Importante para o Playwright não crashar
+    volumes:
+      - .:/app
+      - /app/node_modules # Evita que o host sobrescreva os binários do container
+    ports:
+      - "3000:3000" # Porta para sua futura API
+    stdin_open: true # Permite interagir com o CLI
+    tty: true        # Permite interagir com o CLI

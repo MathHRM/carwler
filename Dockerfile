@@ -1,33 +1,32 @@
-FROM mcr.microsoft.com/playwright:v1.57.0-noble
+# --- ESTÁGIO BASE ---
+# Usamos a imagem oficial do Playwright porque ela já contém todas as 
+# dependências de sistema (libs do Linux) para rodar Chromium, Firefox e Webkit.
+FROM mcr.microsoft.com/playwright:v1.57.0-jammy AS base
 
-# A imagem base já possui o usuário pwuser, então apenas definimos o diretório de trabalho
-# Definir diretório de trabalho
 WORKDIR /app
 
-# Copiar arquivos de dependências
-COPY package.json package-lock.json* ./
+# Copia arquivos de dependências
+COPY package*.json ./
 
-# Instalar todas as dependências (incluindo devDependencies para compilar)
-RUN npm ci
+# --- ESTÁGIO DE DESENVOLVIMENTO ---
+FROM base AS development
+# Instala todas as dependências (incluindo devDependencies como nodemon, jest, etc)
+RUN npm install
 
-# Copiar código fonte
+# Copia o código fonte
 COPY . .
 
-# Compilar TypeScript (ainda como root)
-RUN npm run build
+# Por padrão, inicia em modo de espera ou rodando um script de "watch"
+# Isso facilita o uso como CLI ou API durante o desenvolvimento
+CMD ["npm", "run", "dev"]
 
-# Remover devDependencies após compilação para reduzir tamanho da imagem
-RUN npm prune --production
+# --- ESTÁGIO DE PRODUÇÃO ---
+FROM base AS production
+# Instala apenas dependências necessárias para rodar o app
+RUN npm ci --omit=dev
 
-# Ajustar permissões do diretório para o usuário pwuser
-RUN chown -R pwuser:pwuser /app
+# Copia apenas o código necessário
+COPY . .
 
-# Mudar para usuário não-root (já existe na imagem base)
-USER pwuser
-
-# Expor porta se necessário (para futuro uso com servidor)
-EXPOSE 3000
-
-# Comando padrão
-CMD ["node", "dist/cli/index.js"]
-
+# Comando para rodar a aplicação em produção
+CMD ["node", "src/index.js"]
