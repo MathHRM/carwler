@@ -139,11 +139,6 @@ export class OlxScraper extends BaseScraper {
           // Navegar para a página detalhada
           await this.navigateToPage(page, url, options);
 
-          // Aguardar carregamento da página
-          await page.waitForSelector('div#description-title', { timeout: options?.timeout || 10000 }).catch(() => {
-            throw new Error('Página não carregou corretamente');
-          });
-
           // Obter Locator da página (usar body como container)
           const pageLocator = page.locator('body');
 
@@ -174,7 +169,7 @@ export class OlxScraper extends BaseScraper {
           }
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error);
-          logger.warn('Erro ao fazer scraping de página detalhada', { url, error: errorMessage });
+          logger.warn('Erro ao fazer scraping de página detalhada', { url, error: errorMessage, page: await page.content() });
           errors.push(`${url}: ${errorMessage}`);
         }
       }
@@ -219,7 +214,7 @@ export class OlxScraper extends BaseScraper {
   ): Promise<ScrapingResult<CarAd[]>> {
     // Primeiro extrair URLs
     const urlResult = await this.scrapeCarAdUrlList(page, searchArgs, options);
-    
+
     if (!urlResult.success || !urlResult.data) {
       return {
         success: false,

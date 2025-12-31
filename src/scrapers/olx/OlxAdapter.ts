@@ -137,7 +137,7 @@ export class OlxAdapter extends BaseAdapter {
     const page = this.getPage();
     const imageElements = await page.locator('div#gallery img').all();
     const urls: string[] = [];
-    
+
     for (const img of imageElements) {
       const src = await img.getAttribute('src');
       const srcset = await img.getAttribute('srcset');
@@ -151,7 +151,7 @@ export class OlxAdapter extends BaseAdapter {
         }
       }
     }
-    
+
     return urls;
   }
 
@@ -244,20 +244,10 @@ export class OlxAdapter extends BaseAdapter {
   }
 
   protected async sellerReputation(): Promise<string | null> {
-    const page = this.getPage();
-    const reputationElement = page.locator('.olx-core-badge--secondary').first();
-    return (await reputationElement.textContent())?.trim() || null;
+    return null;
   }
 
   protected async sellerTimeOnOlx(): Promise<string | null> {
-    const page = this.getPage();
-    const timeElement = page.locator('span:text-is("Na OLX desde")').first();
-    const timeText = (await timeElement.textContent())?.trim() || null;
-    if (timeText) {
-      // Extrair apenas a parte após "Na OLX desde"
-      const match = timeText.match(/Na OLX desde\s+(.+)/i);
-      return match ? match[1].trim() : timeText;
-    }
     return null;
   }
 
@@ -276,20 +266,10 @@ export class OlxAdapter extends BaseAdapter {
   }
 
   protected async installment(): Promise<string | null> {
-    const page = this.getPage();
-    const installmentElements = await page.locator('.text-secondary-100').all();
-    if (installmentElements.length > 0) {
-      return (await installmentElements[0].textContent())?.trim() || null;
-    }
     return null;
   }
 
   protected async downPayment(): Promise<string | null> {
-    const page = this.getPage();
-    const downPaymentElements = await page.locator('.text-secondary-100').all();
-    if (downPaymentElements.length > 1) {
-      return (await downPaymentElements[1].textContent())?.trim() || null;
-    }
     return null;
   }
 
